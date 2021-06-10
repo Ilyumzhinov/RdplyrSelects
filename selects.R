@@ -24,6 +24,7 @@ selects <- function(.data, ..., except = NULL) {
     # SELECT formula's rhs only (i.e. unevaluated expressions)
     args <- enquos(...) %>% Map(f_rhs, .)
 
+    # UTILITY FUNCTIONS
     # Maps list and returns a vector.
     map <- function(.list, f) Map(f, .list) %>% unlist()
     is_evalOK <- function(arg) ((tryCatch(eval(arg), error = function(e) NULL) %>% is.null()) == FALSE) || typeof(arg) == "symbol"
@@ -67,22 +68,30 @@ selects <- function(.data, ..., except = NULL) {
         }, ., init = list())
     }
 
-    # Wrap select and mutate tables to preserve their index
+    # Wrap select and mutate tables and preserve their arg's index
     l_select <- wrap_operation(args, i_select, function(i) select(.data, !!!args[i]))
     l_mutate <- wrap_operation(args, i_mutate, function(i) mutate(.data, !!!args[i], .keep = "none"))
     # Construct select except table
     data_except <- select_except(substitute(except))
 
-    # Replaces select column with a mutated col with same label; reserve index
-    replace_same_cols <- function(df_s, df_m) {
+    # Replaces select column with a mutated col with same label, keeps select data only
+    replace_sameCols <- function(df_s, df_m) {
         i_sameT1 <- names(df_s) %in% names(df_m)
         i_sameT2 <- names(df_m) %in% names(df_s)
         data_merge <- df_s
         data_merge[i_sameT1] <- df_m[i_sameT2]
         data_merge
     }
+    # Replaces select column with a mutated col with same label, appends new col to the end
+    replace_left_join <- function(df_old, df_new) {
+        i_sameT1 <- names(df_old) %in% names(df_new)
+        i_sameT2 <- names(df_new) %in% names(df_old)
+        data_merge <- df_old
+        data_merge[i_sameT1] <- df_new[i_sameT2]
+        cbind(data_merge, df_new[!i_sameT2])
+    }
 
-    # Combines wrapped select and mutate tables using indexes
+    # Combines wrapped 2 tables using indexes
     combine_wrap <- function(l_s, l_m, i_s, i_m) {
         if (length(i_s) == 0) {
             return(data.frame(row.names = 1:dim(.data)[1]))
@@ -91,28 +100,32 @@ selects <- function(.data, ..., except = NULL) {
         data_mutate <- l_m %>%
             Filter(function(arg) !is.null(arg), .) %>%
             data.frame()
-        names_mutate <- Map(names, l_m)
-        names_replace <- l_s %>% Map(function(arg) names(arg) %in% names_mutate, .)
-        i_collision <- l_s %>% Reduce(function(accum, arg) accum | (names_mutate %in% names(arg)), ., init = rep(FALSE, length(names_mutate)))
+        # Flatten mutate labels
+        names_mutate <- map(l_m, names) %||% FALSE
+        # Remember which mutate label collide and ignore them
+        i_mNoCollision <- i_m
+        i_mNoCollision[i_m] <- !(l_s %>%
+            Reduce(function(accum, arg_select) accum | (names_mutate %in% names(arg_select)), ., init = rep(FALSE, length(names_mutate))))
 
-        1:length(i_s) %>% Reduce(function(data_out, i) {
+        1:length(i_s) %>% Reduce(function(data_merge, i) {
             if (i_s[i]) {
-                if (TRUE %in% names_replace[[i]]) {
-                    data_collision <- replace_same_cols(l_s[[i]], data_mutate)
-                    data_out <- cbind(data_out, data_collision)
+                data_temp <- replace_left_join(data_merge, l_s[[i]])
+                if (TRUE %in% (names_mutate %in% names(l_s[[i]]))) {
+                    data_collision <- replace_sameCols(data_temp, data_mutate)
+                    data_merge <- data_collision
                 }
                 else {
-                    data_out <- cbind(data_out, l_s[[i]])
+                    data_merge <- data_temp
                 }
             }
-            if (i_m[i] && !i_collision[i]) {
-                data_out <- cbind(data_out, l_m[[i]])
+            if (i_mNoCollision[i]) {
+                data_merge <- cbind(data_merge, l_m[[i]])
             }
-            data_out
+            data_merge
         }, ., init = data.frame(row.names = 1:dim(.data)[1]))
     }
 
-    # IF(except not specified) => COMBINE select, mutate
+    # IF(except not specified) => COMBINE INDEXED select, mutate
     # ELSE(except specified) => COMBINE except, mutate
     if (is.null(data_except)) {
         combine_wrap(l_select, l_mutate, i_select, i_mutate)
