@@ -7,6 +7,8 @@ require(rlang)
 #' @param .data A data frame.
 #' @param ... args. Columns to select or mutate.
 #' @param except Selects all columns except those specified. No need for "-" prescription. E.g. selects(..., except = c(GDP, GDP.deflator))
+#' @return Same as DPLYR's SELECT or MUTATE.
+#' @note Version 4.
 #' @examples
 #' # SELECT by column name or slice or exclusion
 #' usEconomy %>% selects(Year, GDP) # c=2. Column names old
@@ -27,11 +29,41 @@ selects <- function(.data, ..., except = NULL) {
     # UTILITY FUNCTIONS
     # Maps list and returns a vector.
     map <- function(.list, f) Map(f, .list) %>% unlist()
-    is_evalOK <- function(arg) ((tryCatch(eval(arg), error = function(e) NULL) %>% is.null()) == FALSE) || typeof(arg) == "symbol"
+    # Keeps everything from MINOR table but replaces colliding cols with MAJOR's cols.
+    replace_left_join <- function(data_minor, data_major) {
+        c_sameMinor <- names(data_minor) %in% names(data_major)
+        c_sameMajor <- names(data_major) %in% names(data_minor)
+        data_merge <- data_minor
+        data_merge[c_sameMinor] <- data_major[c_sameMajor][, names(data_merge[c_sameMinor])]
+        data_merge
+    }
+    # Keeps everything from both tables but replaces colliding cols with MAJOR's cols.
+    replace_full_join <- function(data_minor, data_major) {
+        c_sameMinor <- names(data_minor) %in% names(data_major)
+        c_sameMajor <- names(data_major) %in% names(data_minor)
+        data_merge <- data_minor
+        data_merge[c_sameMinor] <- data_major[c_sameMajor][, names(data_merge[c_sameMinor])]
+        bind_cols(data_merge, data_major[!c_sameMajor])
+    }
+    # Guaranteed to return a selectable col name for data_mutate.
+    get_argName <- function(args, i_arg) if (names(args[i_arg]) != "") names(args[i_arg]) else expr_text(args[[i_arg]])
+
+    # EVALUATION FUNCTIONS
+    is_evalOK <- function(arg) {
+        is_argSpecFunc <- function(arg) {
+            tidyselect_specFunc <- c("all_of", "any_of", "contains", "ends_with", "everything", "last_col", "matches", "num_range", "one_of", "starts_with")
+
+            TRUE %in% (tidyselect_specFunc %>% Map(function(f_name) grepl(paste(f_name, "[(](.*?)[)]", sep = ""), arg), .))
+        }
+
+        ((tryCatch(eval(arg), error = function(e) NULL) %>% is.null()) == FALSE) ||
+            typeof(arg) == "symbol" ||
+            (expr_text(arg) %>% is_argSpecFunc())
+    }
     is_lblYES <- function(lbl) lbl != ""
 
     # FILTER select args:
-    # IF((eval OK || eval OK') && lbl NO)
+    # IF((eval OK || eval OK' || eval OK_SF) && lbl NO)
     i_select <- map(args, is_evalOK) &
         map(names(args), function(x) !is_lblYES(x))
     # FILTER mutate args:
@@ -58,84 +90,45 @@ selects <- function(.data, ..., except = NULL) {
             }
         }
     }
-    wrap_operation <- function(args, i_operation, f_operation) {
-        if (length(args) == 0) {
-            return(list())
-        }
-        1:length(args) %>% Reduce(function(l_mutate, i) {
-            l_mutate[[i]] <- if (i_operation[i]) f_operation(i) else NULL
-            l_mutate
-        }, ., init = list())
-    }
-
-    # Wrap select and mutate tables and preserve their arg's index
-    l_select <- wrap_operation(args, i_select, function(i) select(.data, !!!args[i]))
-    l_mutate <- wrap_operation(args, i_mutate, function(i) mutate(.data, !!!args[i], .keep = "none"))
+    
+    # Construct mutate table
+    data_mutate <- .data %>% mutate(!!!args[i_mutate], .keep = "none")
     # Construct select except table
     data_except <- select_except(substitute(except))
 
-    # Replaces select column with a mutated col with same label, keeps select data only
-    replace_sameCols <- function(df_s, df_m) {
-        i_sameT1 <- names(df_s) %in% names(df_m)
-        i_sameT2 <- names(df_m) %in% names(df_s)
-        data_merge <- df_s
-        data_merge[i_sameT1] <- df_m[i_sameT2]
-        data_merge
-    }
-    # Replaces select column with a mutated col with same label, appends new col to the end
-    replace_left_join <- function(df_old, df_new) {
-        i_sameT1 <- names(df_old) %in% names(df_new)
-        i_sameT2 <- names(df_new) %in% names(df_old)
-        data_merge <- df_old
-        data_merge[i_sameT1] <- df_new[i_sameT2]
-        cbind(data_merge, df_new[!i_sameT2])
-    }
-
-    # Combines wrapped 2 tables using indexes
-    combine_wrap <- function(l_s, l_m, i_s, i_m) {
-        if (length(i_s) == 0) {
-            return(data.frame(row.names = 1:dim(.data)[1]))
+    join_ordered <- function(args, .data, d_m, i_s, i_m) {
+        if (length(args) == 0) {
+            return(select(.data))
         }
-        # Flatten mutate wrap into mutate data
-        data_mutate <- l_m %>%
-            Filter(function(arg) !is.null(arg), .) %>%
-            data.frame()
-        # Flatten mutate labels
-        names_mutate <- map(l_m, names) %||% FALSE
-        # Remember which mutate label collide and ignore them
-        i_mNoCollision <- i_m
-        i_mNoCollision[i_m] <- !(l_s %>%
-            Reduce(function(accum, arg_select) accum | (names_mutate %in% names(arg_select)), ., init = rep(FALSE, length(names_mutate))))
 
-        1:length(i_s) %>% Reduce(function(data_merge, i) {
+        1:length(args) %>% Reduce(function(data_merge, i) {
             if (i_s[i]) {
-                data_temp <- replace_left_join(data_merge, l_s[[i]])
-                if (TRUE %in% (names_mutate %in% names(l_s[[i]]))) {
-                    data_collision <- replace_sameCols(data_temp, data_mutate)
-                    data_merge <- data_collision
-                }
-                else {
-                    data_merge <- data_temp
-                }
+                # JOIN complete data select and complete data select i => JOIN complete data select and colliding data mutate
+                data_merge <- replace_left_join(
+                    replace_full_join(
+                        data_merge,
+                        select(.data, !!!args[i])
+                    ),
+                    d_m
+                )
             }
-            if (i_mNoCollision[i]) {
-                data_merge <- cbind(data_merge, l_m[[i]])
+            if (i_m[i]) {
+                # SELECT data_mutate i => JOIN complete data select and colliding data mutate
+                data_merge <- replace_full_join(
+                    data_merge,
+                    select(d_m, get_argName(args, i))
+                )
             }
             data_merge
-        }, ., init = data.frame(row.names = 1:dim(.data)[1]))
+        }, ., init = select(.data))
     }
 
-    # IF(except not specified) => COMBINE INDEXED select, mutate
-    # ELSE(except specified) => COMBINE except, mutate
+    # IF(except not specified) => JOIN INDEXED select, mutate
+    # ELSE(except specified) => JOIN except, mutate
     if (is.null(data_except)) {
-        combine_wrap(l_select, l_mutate, i_select, i_mutate)
+        join_ordered(args, .data, data_mutate, i_select, i_mutate)
     }
     else {
-        combine_wrap(
-            list(data_except),
-            c(list(NULL), l_mutate),
-            c(TRUE, rep(FALSE, length(i_mutate))),
-            c(FALSE, i_mutate)
-        )
+        replace_full_join(data_except, data_mutate)
     }
 }
