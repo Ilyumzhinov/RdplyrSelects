@@ -56,28 +56,28 @@ usEconomy <- read.table("data_usEconomy.csv", header = TRUE, sep = ",")
 
 # SELECT by column name or slice or exclusion
 usEconomy |>
-	selects(Year, GDP) # c=2. Column names old
+    selects(Year, GDP) # c=2. Column names old
 usEconomy |>
-	selects(3:7) # c=5. Column names old
+    selects(3:7) # c=5. Column names old
 usEconomy |>
-	selects(except = 1) # c=n_c-1. Column names old
+    selects(except = 1) # c=n_c-1. Column names old
 
 # MUTATE by expression or label with expression
 usEconomy |>
-	selects(Year - 2016, Federal.Funds * 100, GDP / (GDP.deflator / 100)) # c=3. Column names generated
+    selects(Year - 2016, Federal.Funds * 100, GDP / (GDP.deflator / 100)) # c=3. Column names generated
 usEconomy |>
-	selects(index = Year - 2016, Federal.Funds.perc = Federal.Funds * 100, GDP_real = GDP / (GDP.deflator / 100)) # c=3. Column names new
+    selects(index = Year - 2016, Federal.Funds.perc = Federal.Funds * 100, GDP_real = GDP / (GDP.deflator / 100)) # c=3. Column names new
 
 # Use everything at once
 usEconomy |>
-	selects(
-    Year,
-    Year - 2016,
-    6:7,
-    FF.perc = Federal.Funds * 100,
-    GDP_real = GDP / (GDP.deflator / 100),
-    ends_with("ployment")
-	) # c=8. Column names old and generated and new
+    selects(
+        Year,
+        Year - 2016,
+        6:7,
+        FF.perc = Federal.Funds * 100,
+        GDP_real = GDP / (GDP.deflator / 100),
+        ends_with("ployment")
+    ) # c=8. Column names old and generated and new
 #   Year Year - 2016      X      M FF.perc GDP_real Employment Unemployment
 # 1 2016           0 2227.2 2739.7   0.395 17730.56     151436         7751
 # 2 2017           1 2374.6 2930.1   1.002 18144.09     153335         6982
