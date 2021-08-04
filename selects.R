@@ -1,14 +1,14 @@
 # Main package extended.
-require(dplyr)
+library(dplyr)
 # Helps with formula processing.
-require(rlang)
+library(rlang)
 
 #' SELECT, MUTATE columns using this function.
 #' @param .data A data frame.
 #' @param ... args. Columns to select or mutate.
 #' @param except Selects all columns except those specified. No need for "-" prescription. E.g. selects(..., except = c(GDP, GDP.deflator))
 #' @return Same as DPLYR's SELECT or MUTATE.
-#' @note Version 4.
+#' @note Version 4.0.1
 #' @examples
 #' # SELECT by column name or slice or exclusion
 #' usEconomy %>% selects(Year, GDP) # c=2. Column names old
