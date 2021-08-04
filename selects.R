@@ -8,7 +8,7 @@ library(rlang)
 #' @param ... args. Columns to select or mutate.
 #' @param except Selects all columns except those specified. No need for "-" prescription. E.g. selects(..., except = c(GDP, GDP.deflator))
 #' @return Same as DPLYR's SELECT or MUTATE.
-#' @note Version 4.0.1
+#' @note Version 4.0.2
 #' @examples
 #' # SELECT by column name or slice or exclusion
 #' usEconomy %>% selects(Year, GDP) # c=2. Column names old
@@ -101,7 +101,7 @@ selects <- function(.data, ..., except = NULL) {
             return(select(.data))
         }
 
-        1:length(args) %>% Reduce(function(data_merge, i) {
+        seq(1,length(args)) %>% Reduce(function(data_merge, i) {
             if (i_s[i]) {
                 # JOIN complete data select and complete data select i => JOIN complete data select and colliding data mutate
                 data_merge <- replace_left_join(
