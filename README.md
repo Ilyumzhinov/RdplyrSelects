@@ -41,7 +41,7 @@ For each argument, `selects()` chooses a corresponding dplyr function based on c
 | **label NO**  | SELECT        | SELECT         | SELECT           | MUTATE          |
 
 ```
-evaluation OK			= number | numbervector
+evaluation OK		= number | numbervector
 
 evaluation OK' 		= colname
 
