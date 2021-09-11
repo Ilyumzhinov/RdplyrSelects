@@ -1,8 +1,8 @@
 ## Overview
 
-`selects()` is a wrapper around dplyr's `select()` and `mutate()` that combines their functionality into a single step and strives to ease up development.
+`selects()` is a wrapper around dplyr's `select()` and `mutate()` that combines their functionality into a single operation and strives to ease up development.
 
-It produces the same output type that `select()` and `mutate()` functions produced.
+It produces the same output type that `select()` and `mutate()` functions produce.
 
 The main benefits are:
 
@@ -21,17 +21,19 @@ and
 ```R
 # Allows to preserve the order of mutate columns within select columns
 data |>
-	selects(SOME_COLS_SELECT, SOME_COLS_MUTATE, SOME_MORE_COLS_SELECT, SOME_MORE_COLS_MUTATE)
+	selects(COLS_SELECT, COLS_MUTATE, MORE_COLS_SELECT, MORE_COLS_MUTATE)
 # Output: Columns are ordered in a sequence they were written.
 ```
 
 ## Install
 
 1. Just copy everything from the `selects.R` file:
-   1. File contains required packages and the `selects()` function.
+   - File contains required packages and the `selects()` function itself.
 2. Enjoy.
 
-## Argument => Function evaluation
+## Argument → Function
+
+For each argument, `selects()` chooses a corresponding dplyr function based on conditions below.
 
 |               | evaluation OK | evaluation OK' | evaluation OK_SF | evaluation FAIL |
 | ------------- | ------------- | -------------- | ---------------- | --------------- |
@@ -39,36 +41,20 @@ data |>
 | **label NO**  | SELECT        | SELECT         | SELECT           | MUTATE          |
 
 ```
-evaluation OK <= NUMBER || NUMBERVECTOR
+evaluation OK			= number | numbervector
 
-evaluation OK' <= COLNAME
+evaluation OK' 		= colname
 
-evaluation OK_SF <= "all_of()" || "any_of()" || "contains()" || "ends_with()" || "everything()" || "last_col()" || "matches()" || "num_range()" || "one_of()" || "starts_with()"
+evaluation OK_SF	= all_of() | any_of() | contains() | ends_with() | everything() | last_col() | matches() | num_range() | one_of() | starts_with()
 
-evaluation FAIL <= EXPRESSION
+evaluation FAIL 	= expression
 ```
 
 ## Examples
 
+Select and mutate at once.
+
 ```R
-# DATA
-usEconomy <- read.table("data_usEconomy.csv", header = TRUE, sep = ",")
-
-# SELECT by column name or slice or exclusion
-usEconomy |>
-    selects(Year, GDP) # c=2. Column names old
-usEconomy |>
-    selects(3:7) # c=5. Column names old
-usEconomy |>
-    selects(except = 1) # c=n_c-1. Column names old
-
-# MUTATE by expression or label with expression
-usEconomy |>
-    selects(Year - 2016, Federal.Funds * 100, GDP / (GDP.deflator / 100)) # c=3. Column names generated
-usEconomy |>
-    selects(index = Year - 2016, Federal.Funds.perc = Federal.Funds * 100, GDP_real = GDP / (GDP.deflator / 100)) # c=3. Column names new
-
-# Use everything at once
 usEconomy |>
     selects(
         Year,
@@ -86,3 +72,8 @@ usEconomy |>
 # 5 2020           4 2091.1 2695.4   0.370 18397.88     147794        12948
 ```
 
+Use `except` argument (without minus) to exclude columns.
+
+```R
+usEconomy |> selects(except = 1) # c=n_c-1. Column names old
+```
